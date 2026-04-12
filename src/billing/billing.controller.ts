@@ -5,6 +5,7 @@ import {
   createPlanSchema,
   getSubscriptionByTenantPayloadSchema,
   paginationSchema,
+  seedBillingDemoPayloadSchema,
   type Pagination,
   updatePlanPayloadSchema,
   uuidIdPayloadSchema,
@@ -16,6 +17,12 @@ import { BillingService } from './billing.service';
 @Controller()
 export class BillingController {
   constructor(private readonly billingService: BillingService) {}
+
+  @MessagePattern({ cmd: 'seed_billing_demo' })
+  seedBillingDemo(@Payload() payload: unknown) {
+    const dto = parsePayload(seedBillingDemoPayloadSchema, payload ?? {});
+    return this.billingService.seedBillingDemo(dto);
+  }
 
   @MessagePattern({ cmd: 'create_plan' })
   createPlan(@Payload() payload: unknown) {

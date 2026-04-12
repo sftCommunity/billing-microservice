@@ -5,8 +5,14 @@ import type {
   AssignSubscription,
   CreatePlan,
   Pagination,
+  SeedBillingDemoPayload,
   UpdatePlanPayload,
 } from '@workspace/shared';
+
+import {
+  DEMO_BILLING_PLANS,
+  DEMO_DEFAULT_SUBSCRIPTION_PLAN_CODE,
+} from '../seed/demo-plans';
 
 function serializePlan(plan: {
   id: string;
@@ -60,6 +66,51 @@ function serializeSubscription(row: {
 export class BillingService extends PrismaClient implements OnModuleInit {
   async onModuleInit() {
     await this.$connect();
+  }
+
+  /**
+   * Upserts demo plans (`starter`, `growth`, `enterprise`) by `code`.
+   * Optionally assigns **starter** to `tenantId` (UUID from auth `tenants` after auth seed).
+   */
+  async seedBillingDemo(input: SeedBillingDemoPayload) {
+    const plansOut: ReturnType<typeof serializePlan>[] = [];
+    for (const def of DEMO_BILLING_PLANS) {
+      const row = await this.plan.upsert({
+        where: { code: def.code },
+        create: {
+          code: def.code,
+          name: def.name,
+          description: def.description ?? null,
+          limits: (def.limits ?? {}) as object,
+        },
+        update: {
+          name: def.name,
+          description: def.description ?? null,
+          limits: (def.limits ?? {}) as object,
+        },
+      });
+      plansOut.push(serializePlan(row));
+    }
+
+    let subscription: ReturnType<typeof serializeSubscription> | null = null;
+    if (input.tenantId) {
+      const starter = await this.plan.findUnique({
+        where: { code: DEMO_DEFAULT_SUBSCRIPTION_PLAN_CODE },
+      });
+      if (!starter) {
+        throw new RpcException({
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: `Seed failed: plan ${DEMO_DEFAULT_SUBSCRIPTION_PLAN_CODE} missing after upsert`,
+        });
+      }
+      subscription = await this.assignSubscription({
+        tenantId: input.tenantId,
+        planId: starter.id,
+        status: 'active',
+      });
+    }
+
+    return { plans: plansOut, subscription };
   }
 
   async createPlan(dto: CreatePlan) {
