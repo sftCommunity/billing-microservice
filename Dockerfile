@@ -11,4 +11,6 @@ RUN npm install
 
 COPY microservices/billing-microservice/ .
 
+RUN npx prisma generate
+
 EXPOSE 3006
